@@ -161,6 +161,7 @@ def setup_maiasdr(args):
         args.ws_adress + '/api/spectrometer',
         json={
             'output_sampling_frequency': args.spectrum_rate,
+            "mode":"PeakDetect",
         })
     if response.status_code != 200:
         print(response.text)
@@ -197,7 +198,7 @@ def parse_args():
     parser.add_argument('--spectrum_rate', type=float, default=100,
                         help='Spectrum rate [default=%(default)r] Hz')
     parser.add_argument('--ws_address', type=str,
-                        help='websocket server address', default="")
+                        help='websocket server address', default="ws://192.168.2.1:8000")
     parser.add_argument('--frequency_range', type=list, default=[2800e6, 3800e6],
                         help='Frequency range for emitter detection [default=%(default)r] Hz')
     parser.add_argument('--threshold_gain', type=int, default=40,
