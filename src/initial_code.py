@@ -44,23 +44,24 @@ import requests
 import sys
 
 class emitter_finder:
-    def __init__(self, center_freq, rx_gain, bandwidth, samp_rate, spectrum_rate, ws_address, frequency_range, threshold_gain):
+    def __init__(self, center_freq, rx_gain, bandwidth, samp_rate, spectrum_rate, ws_address, http_address, frequency_range, threshold_gain):
         self.center_freq = center_freq
         self.rx_gain = rx_gain
         self.bandwidth = bandwidth
         self.samp_rate = samp_rate
         self.spectrum_rate = spectrum_rate
         self.ws_address = ws_address # websocket address base (non waterfall part)
+        self.http_adress = http_address
         self.frequency_range = frequency_range
         
         self.threshold_gain = threshold_gain
         self.wide = True # if False it will be narrow a.k.a frequencies around center
-        self.freqs = np.zeros(1,1)
+        self.freqs = np.zeros((1,1))
         self.measured_frequency_list = []
         self.measured_power_list = []
         self.measurement_counter = False
-        self.measurement_previous = np.zeros(1,1)
-        self.measurement_current = np.zeros(1,1)
+        self.measurement_previous = np.zeros((1,1),dtype=np.float32)
+        self.measurement_current = np.zeros((1,1),dtype=np.float32)
         
         self.index_of_loop = 0 # this is to loop around the frequencies
         self.found_gain = 0
@@ -71,7 +72,7 @@ class emitter_finder:
         upper_limit = self.frequency_range[1]
         bandwith = self.bandwidth
 
-        freqs = np.arange(lower_limit + bandwith/2, upper_limit - bandwith/2, bandwith)
+        freqs = np.arange(lower_limit + bandwith/2, upper_limit - bandwith/2, bandwith/2)
         self.freqs = freqs
         return freqs
 
@@ -79,22 +80,22 @@ class emitter_finder:
         center_freq = self.found_frequency
         bandwith = self.bandwidth
 
-        freqs = np.arange(center_freq - bandwith * 2.5, center_freq + bandwith * 2.5, bandwith)
+        freqs = np.arange(max(center_freq - bandwith * 1.5, self.frequency_range[0]), min(center_freq + bandwith * 1.5, self.frequency_range[1]), bandwith/2)
         self.freqs = freqs
         return freqs
     def process_measurement(self, measurement):
-        if self.measurment_counter == False:
+        if self.measurement_counter == False:
             self.measurement_counter = True
             self.measurement_previous = measurement
             return 
         else:
             self.measurement_counter = False
             # average the two measurements
-            self.measurement_current = np.divide(np.sum(self.measurement_previous, measurement), 2)
+            self.measurement_current = np.divide(np.add(self.measurement_previous, measurement), 2)
             
-            max_power = max(self.measurement_current)
+            max_power = np.max(self.measurement_current)
             # TODO: check frequency bins
-            frequency_max_power = self.center_freq + self.measurement_current.index(max_power) - (len(self.measurement_current)/2)
+            frequency_max_power = self.center_freq # + np.argmax(self.measurement_current) - (self.measurement_current.size/2)
 
             self.measured_power_list.append(max_power)
             self.measured_frequency_list.append(frequency_max_power)
@@ -105,7 +106,9 @@ class emitter_finder:
                 # check if it is an update value
                 if value_of_this_scan > self.threshold_gain:
                     self.found_gain = value_of_this_scan
-                    self.found_frequency = self.measured_frequency_list.index(value_of_this_scan)
+                    self.found_frequency = self.measured_frequency_list[self.measured_power_list.index(value_of_this_scan)]
+                    print("Found frequency = ", self.found_frequency)
+                    print("Found Gain", self.found_gain)
                     self.wide = False
                 # in this case this means we lost it
                 else:
@@ -132,10 +135,10 @@ class emitter_finder:
         Change the center frequency of the SDR by sending a request to the Maia SDR.
         """
         json = {
-            "rx_lo_frequency": self.center_freq
+            "rx_lo_frequency": int(self.center_freq)
         }
         response = requests.patch(
-            self.ws_address + '/api/ad9361',
+            self.http_adress + '/api/ad9361',
             json=json)
         if response.status_code != 200:
             print(response.text)
@@ -146,10 +149,10 @@ class emitter_finder:
 
 def setup_maiasdr(args):
     response = requests.patch(
-        args.maiasdr_url + '/api/ad9361',
+        args.http_address + '/api/ad9361',
         json={
             'sampling_frequency': args.samp_rate,
-            'rx_rf_bandwidth': args.samp_rate,
+            'rx_rf_bandwidth': args.bandwidth,
             'rx_lo_frequency': args.center_freq,
             'rx_gain': args.rx_gain,
             'rx_gain_mode': 'Manual',
@@ -158,7 +161,7 @@ def setup_maiasdr(args):
         print(response.text)
         sys.exit(1)
     response = requests.patch(
-        args.ws_adress + '/api/spectrometer',
+        args.http_address + '/api/spectrometer',
         json={
             'output_sampling_frequency': args.spectrum_rate,
             "mode":"PeakDetect",
@@ -177,7 +180,6 @@ async def spectrum_loop(address, finder):
             finder.process_measurement(power_arry)
 
 
-
 def main_async(ws_address, finder):
     asyncio.run(spectrum_loop(ws_address, finder))
 
@@ -188,32 +190,34 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description='Emitter finter over waterfall using Maia SDR')
     parser.add_argument('--center_freq', type=int, default=int(3000e6),
-                        help='Center frequency [default=%(default)r]')
+                        help='Center frequency [default=%(default)r]', required=False)
     parser.add_argument('--rx_gain', type=int, default=10,
-                        help='RX gain [default=%(default)r] dB')
-    parser.add_argument('--bandwidth', type=int, default=int(54e6),
-                        help='bandwidth [default=%(default)r]')
-    parser.add_argument('--samp_rate', type=int, default=int(18e6),
-                        help='Sampling rate [default=%(default)r]')
+                        help='RX gain [default=%(default)r] dB', required=False)
+    parser.add_argument('--bandwidth', type=int, default=int(18e6),
+                        help='bandwidth [default=%(default)r]', required=False)
+    parser.add_argument('--samp_rate', type=int, default=int(54e6),
+                        help='Sampling rate [default=%(default)r]', required=False)
     parser.add_argument('--spectrum_rate', type=float, default=100,
-                        help='Spectrum rate [default=%(default)r] Hz')
+                        help='Spectrum rate [default=%(default)r] Hz', required=False)
     parser.add_argument('--ws_address', type=str,
-                        help='websocket server address', default="ws://192.168.2.1:8000")
+                        help='websocket server address', default="ws://192.168.2.1:8000", required=False)
+    parser.add_argument('--http_address', type=str,
+                        help='normal server address', default="http://192.168.2.1:8000", required=False)
     parser.add_argument('--frequency_range', type=list, default=[2800e6, 3800e6],
-                        help='Frequency range for emitter detection [default=%(default)r] Hz')
-    parser.add_argument('--threshold_gain', type=int, default=40,
-                        help='Threshold to decide whether the device is found or not')
+                        help='Frequency range for emitter detection [default=%(default)r] Hz', required=False)
+    parser.add_argument('--threshold_gain', type=int, default=35,
+                        help='Threshold to decide whether the device is found or not', required=False)
     return parser.parse_args()
 
 def main():
     args = parse_args()
     setup_maiasdr(args)
-    waterfall_adress = args.ws_adress + "/waterfall"
+    waterfall_address = args.ws_address + "/waterfall"
 
-    emitter = emitter_finder(args.center_freq, args.rx_gain, args.bandwidth, args.samp_rate, args.spectrum_rate, args.ws_adress, args.frequency_range)
+    emitter = emitter_finder(args.center_freq, args.rx_gain, args.bandwidth, args.samp_rate, args.spectrum_rate, args.ws_address, args.http_address, args.frequency_range, args.threshold_gain)
     emitter.get_frequencies()
     
-    loop = threading.Thread(target=main_async, args=(waterfall_adress, emitter_finder))
+    loop = threading.Thread(target=main_async, args=(waterfall_address, emitter))
     loop.start()
 
 
