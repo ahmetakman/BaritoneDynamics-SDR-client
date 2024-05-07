@@ -43,20 +43,6 @@ import websockets
 
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description='Records QO-100 WB transponder waterfall using Maia SDR')
-    parser.add_argument('--center_freq', type=int, default=int(3.0e9),
-                        help='Center frequency [default=%(default)r]')
-    parser.add_argument('--rx_gain', type=int, default=10,
-                        help='RX gain [default=%(default)r]')
-    parser.add_argument('--samp_rate', type=int, default=int(18e6),
-                        help='Sampling rate [default=%(default)r]')
-    parser.add_argument('--spectrum_rate', type=float, default=100,
-                        help='Spectrum rate [default=%(default)r]')
-    parser.add_argument('--ws_address', type=str,
-                        help='websocket server address', default="ws://192")
-    return parser.parse_args()
 
 
 
@@ -84,7 +70,43 @@ def setup_maiasdr(args):
         sys.exit(1)
 
 
+
+async def spectrum_loop(address):
+    async with websockets.connect(address) as ws:
+        while True:
+            spec = np.frombuffer(await ws.recv(), 'float32')
+            power_arry = 10*np.log10(spec)
+
+
+
+def main_async(ws_address):
+    asyncio.run(spectrum_loop(ws_address))
+
+
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description='Emitter finter over waterfall using Maia SDR')
+    parser.add_argument('--center_freq', type=int, default=int(3.0e9),
+                        help='Center frequency [default=%(default)r]')
+    parser.add_argument('--rx_gain', type=int, default=10,
+                        help='RX gain [default=%(default)r]')
+    parser.add_argument('--samp_rate', type=int, default=int(18e6),
+                        help='Sampling rate [default=%(default)r]')
+    parser.add_argument('--spectrum_rate', type=float, default=100,
+                        help='Spectrum rate [default=%(default)r]')
+    parser.add_argument('--ws_address', type=str,
+                        help='websocket server address', default="ws://192")
+    return parser.parse_args()
+
 def main():
-    pass
+    args = parse_args()
+    setup_maiasdr(args)
+    loop = threading.Thread(target=main_async, args=(args.ws_adress))
+    loop.start()
+
+
+    
 if __name__ == '__main__':
     main()
