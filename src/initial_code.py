@@ -67,6 +67,7 @@ class emitter_finder:
         self.found_gain = 0
         self.found_frequency = self.center_freq
 
+        self.profiler_counter = 0
     def get_frequencies(self):
         lower_limit = self.frequency_range[0]
         upper_limit = self.frequency_range[1]
@@ -74,7 +75,7 @@ class emitter_finder:
 
         freqs = np.arange(lower_limit + bandwith/2, upper_limit - bandwith/2, bandwith/2)
         self.freqs = freqs
-        return freqs
+        return 
 
     def get_frequencies_around_center(self):
         center_freq = self.found_frequency
@@ -82,7 +83,7 @@ class emitter_finder:
 
         freqs = np.arange(max(center_freq - bandwith * 1.5, self.frequency_range[0]), min(center_freq + bandwith * 1.5, self.frequency_range[1]), bandwith/2)
         self.freqs = freqs
-        return freqs
+        return 
     def process_measurement(self, measurement):
         if self.measurement_counter == False:
             self.measurement_counter = True
@@ -102,13 +103,16 @@ class emitter_finder:
 
             # decision part
             if self.center_freq == self.freqs[-1]:
+                self.profiler_counter = self.profiler_counter + 1
+                if self.profiler_counter == 50:
+                    sys.exit(1)
                 value_of_this_scan = max(self.measured_power_list)
                 # check if it is an update value
                 if value_of_this_scan > self.threshold_gain:
                     self.found_gain = value_of_this_scan
                     self.found_frequency = self.measured_frequency_list[self.measured_power_list.index(value_of_this_scan)]
-                    print("Found frequency = ", self.found_frequency)
-                    print("Found Gain", self.found_gain)
+                    # print("Found frequency = ", self.found_frequency)
+                    # print("Found Gain", self.found_gain)
                     self.wide = False
                 # in this case this means we lost it
                 else:
@@ -153,7 +157,7 @@ def setup_maiasdr(args):
         json={
             'sampling_frequency': args.samp_rate,
             'rx_rf_bandwidth': args.bandwidth,
-            'rx_lo_frequency': args.center_freq,
+            'rx_lo_frequency': int(args.frequency_range[0]),
             'rx_gain': args.rx_gain,
             'rx_gain_mode': 'Manual',
         })
