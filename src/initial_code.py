@@ -41,6 +41,7 @@ import numpy as np
 import websockets
 import requests
 
+import socket
 import sys
 
 class emitter_finder:
@@ -56,18 +57,20 @@ class emitter_finder:
         
         self.threshold_gain = threshold_gain
         self.wide = True # if False it will be narrow a.k.a frequencies around center
-        self.freqs = np.zeros((1,1))
+        self.freqs = None
         self.measured_frequency_list = []
         self.measured_power_list = []
         self.measurement_counter = False
-        self.measurement_previous = np.zeros((1,1),dtype=np.float32)
-        self.measurement_current = np.zeros((1,1),dtype=np.float32)
+        self.measurement_previous = None#np.zeros((1,1),dtype=np.float32)
+        self.measurement_current = None#np.zeros((1,1),dtype=np.float32)
         
         self.index_of_loop = 0 # this is to loop around the frequencies
-        self.found_gain = 0
-        self.found_frequency = self.center_freq
+        self.found_gain = None#0
+        self.found_frequency = frequency_range[0]#self.center_freq
 
-        self.profiler_counter = 0
+        self.sock = None
+        self.server_address = None
+        # self.profiler_counter = 0
     def get_frequencies(self):
         lower_limit = self.frequency_range[0]
         upper_limit = self.frequency_range[1]
@@ -103,19 +106,27 @@ class emitter_finder:
 
             # decision part
             if self.center_freq == self.freqs[-1]:
-                self.profiler_counter = self.profiler_counter + 1
+                # these comments are left for profiling., otherwise the code would run forever
+                # self.profiler_counter = self.profiler_counter + 1
                 # if self.profiler_counter == 50:
                 # sys.exit(1)
+
                 value_of_this_scan = max(self.measured_power_list)
                 # check if it is an update value
                 if value_of_this_scan > self.threshold_gain:
                     self.found_gain = value_of_this_scan
                     self.found_frequency = self.measured_frequency_list[self.measured_power_list.index(value_of_this_scan)]
-                    print("Found frequency = ", self.found_frequency)
-                    print("Found Gain = ", self.found_gain)
+                    ## These print statements are left for debugging purposes
+                    # print("Found frequency = ", self.found_frequency)
+                    # print("Found Gain = ", self.found_gain)
+                    # send the found frequency and gain to the UDP server
+                    message = str(self.found_frequency) + "," + str(self.found_gain)
+                    self.sock.sendto(message.encode(), self.server_address)
+
                     self.wide = False
-                # in this case this means we lost it
+                
                 else:
+                    # in this case this means we lost it
                     self.wide = True
                     print("Lost the signal")
                 
@@ -150,6 +161,11 @@ class emitter_finder:
             sys.exit(1)
         else:
             return True
+    def UDP_init(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.server_address = ('localhost', 10000)
+        return 
+
 
 
 def setup_maiasdr(args):
@@ -174,7 +190,6 @@ def setup_maiasdr(args):
     if response.status_code != 200:
         print(response.text)
         sys.exit(1)
-
 
 
 async def spectrum_loop(address, finder):
@@ -216,12 +231,15 @@ def parse_args():
 
 def main():
     args = parse_args()
+    
     setup_maiasdr(args)
     waterfall_address = args.ws_address + "/waterfall"
 
+    
     emitter = emitter_finder(args.center_freq, args.rx_gain, args.bandwidth, args.samp_rate, args.spectrum_rate, args.ws_address, args.http_address, args.frequency_range, args.threshold_gain)
     emitter.get_frequencies()
-    
+    emitter.UDP_init()
+
     loop = threading.Thread(target=main_async, args=(waterfall_address, emitter))
     loop.start()
 
