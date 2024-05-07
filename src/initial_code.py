@@ -104,19 +104,20 @@ class emitter_finder:
             # decision part
             if self.center_freq == self.freqs[-1]:
                 self.profiler_counter = self.profiler_counter + 1
-                if self.profiler_counter == 50:
-                    sys.exit(1)
+                # if self.profiler_counter == 50:
+                # sys.exit(1)
                 value_of_this_scan = max(self.measured_power_list)
                 # check if it is an update value
                 if value_of_this_scan > self.threshold_gain:
                     self.found_gain = value_of_this_scan
                     self.found_frequency = self.measured_frequency_list[self.measured_power_list.index(value_of_this_scan)]
-                    # print("Found frequency = ", self.found_frequency)
-                    # print("Found Gain", self.found_gain)
+                    print("Found frequency = ", self.found_frequency)
+                    print("Found Gain = ", self.found_gain)
                     self.wide = False
                 # in this case this means we lost it
                 else:
                     self.wide = True
+                    print("Lost the signal")
                 
                 if self.wide == True:
                     self.get_frequencies()
@@ -158,8 +159,8 @@ def setup_maiasdr(args):
             'sampling_frequency': args.samp_rate,
             'rx_rf_bandwidth': args.bandwidth,
             'rx_lo_frequency': int(args.frequency_range[0]),
-            'rx_gain': args.rx_gain,
-            'rx_gain_mode': 'Manual',
+            # 'rx_gain': args.rx_gain,
+            'rx_gain_mode': 'FastAttack',
         })
     if response.status_code != 200:
         print(response.text)
@@ -209,7 +210,7 @@ def parse_args():
                         help='normal server address', default="http://192.168.2.1:8000", required=False)
     parser.add_argument('--frequency_range', type=list, default=[2800e6, 3800e6],
                         help='Frequency range for emitter detection [default=%(default)r] Hz', required=False)
-    parser.add_argument('--threshold_gain', type=int, default=35,
+    parser.add_argument('--threshold_gain', type=int, default=90,
                         help='Threshold to decide whether the device is found or not', required=False)
     return parser.parse_args()
 
