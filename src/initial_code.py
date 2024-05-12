@@ -144,7 +144,7 @@ class emitter_finder:
                 # print("Found frequency = ", self.found_frequency)
                 # print("Found Gain = ", self.found_gain)
                 # send the found frequency and gain to the UDP server
-                message = str(self.found_frequency) + "," + str(self.found_gain)
+                message = str(self.found_frequency) + "," + str(self.found_gain) + "\n"
                 self.sock.sendto(message.encode(), self.server_address)
 
                 self.wide = False
@@ -205,7 +205,7 @@ def setup_maiasdr(args):
         args.http_address + "/api/spectrometer",
         json={
             "output_sampling_frequency": args.spectrum_rate,
-            "mode": "PeakDetect",
+            "mode": "Average",
         },
     )
     if response.status_code != 200:
@@ -260,7 +260,7 @@ def parse_args():
     parser.add_argument(
         "--spectrum_rate",
         type=float,
-        default=100,
+        default=160,
         help="Spectrum rate [default=%(default)r] Hz",
         required=False,
     )
@@ -281,14 +281,14 @@ def parse_args():
     parser.add_argument(
         "--frequency_range",
         type=list,
-        default=[2800e6, 3800e6],
+        default=[2450e6, 3450e6],
         help="Frequency range for emitter detection [default=%(default)r] Hz",
         required=False,
     )
     parser.add_argument(
         "--threshold_gain",
         type=int,
-        default=90,
+        default=85,
         help="Threshold to decide whether the device is found or not",
         required=False,
     )
