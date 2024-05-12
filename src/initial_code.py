@@ -88,7 +88,7 @@ class emitter_finder:
         bandwith = self.bandwidth
 
         freqs = np.arange(
-            lower_limit + bandwith / 2, upper_limit - bandwith / 2, bandwith / 2
+            lower_limit + bandwith / 2, upper_limit - bandwith / 2, bandwith / 1.5
         )
         self.freqs = freqs
         return
@@ -98,9 +98,9 @@ class emitter_finder:
         bandwith = self.bandwidth
 
         freqs = np.arange(
-            max(center_freq - bandwith * 1.5, self.frequency_range[0]),
-            min(center_freq + bandwith * 1.5, self.frequency_range[1]),
-            bandwith / 2,
+            max(center_freq - bandwith * 1.0, self.frequency_range[0]),
+            min(center_freq + bandwith * 1.0, self.frequency_range[1]),
+            bandwith / 1.5,
         )
         self.freqs = freqs
         return
@@ -152,6 +152,9 @@ class emitter_finder:
             else:
                 # in this case this means we lost it
                 self.wide = True
+                message = str(self.found_frequency) + ",1500\n" # lost message with last frequency
+                self.sock.sendto(message.encode(), self.server_address)
+
                 print("Lost the signal")
 
             if self.wide == True:
@@ -281,7 +284,7 @@ def parse_args():
     parser.add_argument(
         "--frequency_range",
         type=list,
-        default=[2450e6, 3450e6],
+        default=[2800e6, 3800e6],
         help="Frequency range for emitter detection [default=%(default)r] Hz",
         required=False,
     )
