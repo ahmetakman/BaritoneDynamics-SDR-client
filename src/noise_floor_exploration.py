@@ -34,6 +34,7 @@ Spectrum Rate = 100-120 # Hz, MAX~203 Hz
 import argparse
 import asyncio
 import threading
+import select
 
 import numpy as np
 import websockets
@@ -150,25 +151,40 @@ def setup_maiasdr(args):
         sys.exit(1)
 
 
-async def spectrum_loop(address, line):
+async def spectrum_loop(address, line, finder):
     async with websockets.connect(address) as ws:
+        i = 0
         while True:
+            
             spec = np.frombuffer(await ws.recv(), "float32")
             power_arry = 10 * np.log10(spec)
             line.set_ydata(power_arry)
+            
+            ready, _, _ = select.select([sys.stdin], [], [], 0.00001)  # Check every 0.1 seconds            
+            if ready:
+                user_input = sys.stdin.readline().strip()
+                if user_input:
+                    i += 1
+                    if i == len(finder.freqs):
+                        i = 0
+                    finder.center_freq = finder.freqs[i]
+                    finder.change_center_freq()
+                    print("center frequency is changed to = ", finder.center_freq)
+                    continue
 
 
-def main_async(ws_address, line):
-    asyncio.run(spectrum_loop(ws_address, line))
+def main_async(ws_address, line, finder):
+    asyncio.run(spectrum_loop(ws_address, line, finder))
 
 def prepare_plot(args):
     plt.ion()
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    freqs = np.arange(4096)
+    # 4096 points between -bandwidth/2 and +bandwidth/2
+    freqs = np.linspace(-args.bandwidth/2, args.bandwidth/2, 4096)
     line, = ax.plot(freqs, np.zeros(freqs.size))
-    ax.title("gain = "+ str(args.rx_gain))
-    ax.set_ylim((40, 100))
+    ax.set_title("gain = "+ str(args.rx_gain))
+    ax.set_ylim((10, 100))
     return fig, ax, line
 
 
@@ -264,8 +280,9 @@ def main():
     emitter.UDP_init()
     fig, ax, line = prepare_plot(args)
 
-    loop = threading.Thread(target=main_async, args=(waterfall_address, line))
+    loop = threading.Thread(target=main_async, args=(waterfall_address, line, emitter))
     loop.start()
+
     plt.show(block=True)
 
 
