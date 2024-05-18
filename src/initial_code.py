@@ -81,6 +81,7 @@ class emitter_finder:
         self.sock = None
         self.server_address = None
         # self.profiler_counter = 0
+        self.lost_counter = 0 #ilhami
 
     def get_frequencies(self):
         lower_limit = self.frequency_range[0]
@@ -88,7 +89,7 @@ class emitter_finder:
         bandwith = self.bandwidth
 
         freqs = np.arange(
-            lower_limit + bandwith / 2, upper_limit - bandwith / 2, bandwith / 1.5
+            lower_limit + bandwith / 2, upper_limit - bandwith / 2, bandwith / 1
         )
         self.freqs = freqs
         return
@@ -98,12 +99,14 @@ class emitter_finder:
         bandwith = self.bandwidth
 
         freqs = np.arange(
-            max(center_freq - bandwith * 1.0, self.frequency_range[0]),
-            min(center_freq + bandwith * 1.0, self.frequency_range[1]),
-            bandwith / 1.5,
+            max(center_freq - bandwith * 0.5, self.frequency_range[0]),
+            min(center_freq + bandwith * 1, self.frequency_range[1]),
+            bandwith / 2,
         )
+        # print(freqs)
         self.freqs = freqs
         return
+    
 
     def process_measurement(self, measurement):
         if self.measurement_counter == False:
@@ -135,6 +138,7 @@ class emitter_finder:
 
             value_of_this_scan = max(self.measured_power_list)
             # check if it is an update value
+            
             if value_of_this_scan > self.threshold_gain:
                 self.found_gain = value_of_this_scan
                 self.found_frequency = self.measured_frequency_list[
@@ -149,13 +153,29 @@ class emitter_finder:
 
                 self.wide = False
 
+
+                #following part of this if block is added to ensure we lost the signal (ilhami)
+                self.lost_counter = 0 # added
+
             else:
                 # in this case this means we lost it
-                self.wide = True
-                message = str(self.found_frequency) + ",1500\n" # lost message with last frequency
-                self.sock.sendto(message.encode(), self.server_address)
+                #this else code is manipulated to ensure we lost the signal. Older version is zipped. (ilhami)
+                self.lost_counter += 1
+                if self.lost_counter == 5:
+                    self.lost_counter = 0
+                    self.wide = True
 
-                print("Lost the signal")
+
+                    message = str(self.found_frequency) + ",1500\n" # lost message with last frequency
+                    self.sock.sendto(message.encode(), self.server_address)
+                else:
+                    message = str(self.found_frequency) + "," + str(self.found_gain) + "\n"
+                    self.sock.sendto(message.encode(), self.server_address)
+                    self.wide = False
+
+                    
+
+                print("Lost the signal",self.lost_counter)
 
             if self.wide == True:
                 self.get_frequencies()
@@ -186,7 +206,7 @@ class emitter_finder:
 
     def UDP_init(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.server_address = ("localhost", 10000)
+        self.server_address = ("localhost", 10010)
         return
 
 
@@ -197,8 +217,8 @@ def setup_maiasdr(args):
             "sampling_frequency": args.samp_rate,
             "rx_rf_bandwidth": args.bandwidth,
             "rx_lo_frequency": int(args.frequency_range[0]),
-            # 'rx_gain': args.rx_gain,
-            "rx_gain_mode": "FastAttack",
+            'rx_gain': args.rx_gain,
+            "rx_gain_mode": "Manual",
         },
     )
     if response.status_code != 200:
@@ -242,14 +262,14 @@ def parse_args():
     parser.add_argument(
         "--rx_gain",
         type=int,
-        default=10,
+        default=60,
         help="RX gain [default=%(default)r] dB",
         required=False,
     )
     parser.add_argument(
         "--bandwidth",
         type=int,
-        default=int(18e6),
+        default=int(18e6), # TODO
         help="bandwidth [default=%(default)r]",
         required=False,
     )
@@ -291,7 +311,7 @@ def parse_args():
     parser.add_argument(
         "--threshold_gain",
         type=int,
-        default=85,
+        default=55,
         help="Threshold to decide whether the device is found or not",
         required=False,
     )
