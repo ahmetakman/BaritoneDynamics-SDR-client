@@ -150,9 +150,11 @@ class emitter_finder:
                 # send the found frequency and gain to the UDP server
                 message = str(self.found_frequency) + "," + str(self.found_gain) + "\n"
                 self.sock.sendto(message.encode(), self.server_address)
-
-                self.wide = False
-
+                
+                if self.wide == True:
+                    self.wide = False
+                    self.bandwidth = 18e6
+                    self.change_bandwidth()
 
                 #following part of this if block is added to ensure we lost the signal (ilhami)
                 self.lost_counter = 0 # added
@@ -164,7 +166,8 @@ class emitter_finder:
                 if self.lost_counter == 5:
                     self.lost_counter = 0
                     self.wide = True
-
+                    self.bandwidth = 54e6
+                    self.change_bandwidth()
 
                     message = str(self.found_frequency) + ",1500\n" # lost message with last frequency
                     self.sock.sendto(message.encode(), self.server_address)
@@ -197,6 +200,18 @@ class emitter_finder:
         Change the center frequency of the SDR by sending a request to the Maia SDR.
         """
         json = {"rx_lo_frequency": int(self.center_freq)}
+        response = requests.patch(self.http_adress + "/api/ad9361", json=json)
+        if response.status_code != 200:
+            print(response.text)
+            sys.exit(1)
+        else:
+            return True
+
+    def change_bandwidth(self):
+        """
+        Change the bandwidth of the SDR by sending a request to the Maia SDR.
+        """
+        json = {"bandwidth": self.bandwidth}
         response = requests.patch(self.http_adress + "/api/ad9361", json=json)
         if response.status_code != 200:
             print(response.text)
@@ -311,7 +326,7 @@ def parse_args():
     parser.add_argument(
         "--threshold_gain",
         type=int,
-        default=55,
+        default=75,
         help="Threshold to decide whether the device is found or not",
         required=False,
     )
