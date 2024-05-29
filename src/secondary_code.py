@@ -34,7 +34,6 @@ Spectrum Rate = 100-120 # Hz, MAX~203 Hz
 import argparse
 import asyncio
 import threading
-import select
 
 import numpy as np
 import websockets
@@ -43,7 +42,6 @@ import requests
 import socket
 import sys
 
-import matplotlib.pyplot as plt
 
 class emitter_finder:
     def __init__(
@@ -72,17 +70,18 @@ class emitter_finder:
         self.freqs = None
         self.measured_frequency_list = []
         self.measured_power_list = []
-        self.measurement_counter = False
+        self.measurement_counter = 0
         self.measurement_previous = None  # np.zeros((1,1),dtype=np.float32)
         self.measurement_current = None  # np.zeros((1,1),dtype=np.float32)
 
         self.index_of_loop = 0  # this is to loop around the frequencies
         self.found_gain = None  # 0
-        self.found_frequency = frequency_range[0]  # self.center_freq
+        self.found_frequency =  self.center_freq # frequency_range[0]  #
 
         self.sock = None
         self.server_address = None
         # self.profiler_counter = 0
+        self.lost_counter = 0 #ilhami
 
     def get_frequencies(self):
         lower_limit = self.frequency_range[0]
@@ -90,7 +89,7 @@ class emitter_finder:
         bandwith = self.bandwidth
 
         freqs = np.arange(
-            lower_limit + bandwith / 2, upper_limit - bandwith / 2, bandwith / 1.5
+            lower_limit + bandwith / 2, upper_limit - bandwith / 2, bandwith / 1
         )
         self.freqs = freqs
         return
@@ -100,12 +99,54 @@ class emitter_finder:
         bandwith = self.bandwidth
 
         freqs = np.arange(
-            max(center_freq - bandwith * 1.0, self.frequency_range[0]),
-            min(center_freq + bandwith * 1.0, self.frequency_range[1]),
-            bandwith / 1.5,
+            max(center_freq - bandwith * 3.5, self.frequency_range[0]),
+            min(center_freq + bandwith * 4, self.frequency_range[1]),
+            bandwith / 1,
         )
+        # print(freqs)
         self.freqs = freqs
         return
+    
+    def get_random_frequencies(self):
+        freqs = np.random.randint(2800e6, 3800e6, 10)
+        self.freqs = freqs
+        return
+    
+    def process_measurement(self, measurement):
+
+        
+        if self.measurement_counter < len(self.freqs):
+            self.measurement_counter = self.measurement_counter + 1
+            
+            self.measured_power_list.append(np.max(measurement))
+            self.measured_frequency_list.append(self.freqs[self.index_of_loop])
+
+        else:
+            self.found_gain = np.max(self.measured_power_list)
+            self.found_frequency = self.measured_frequency_list[0]
+            self.measured_power_list = []
+            self.measured_frequency_list = []
+            self.measurement_counter = 0
+
+            if self.found_gain > self.threshold_gain:
+                # publish the found frequency and gain
+                print("Found frequency: ", self.found_frequency)
+                print("Found gain: ", self.found_gain)
+
+                message = str(self.found_frequency) + "," + str(self.found_gain) + "\n"
+                self.sock.sendto(message.encode(), self.server_address)
+
+                self.found_gain = None
+                self.found_frequency = self.center_freq
+        
+
+        self.index_of_loop = self.index_of_loop + 1
+
+        if self.index_of_loop == len(self.freqs):
+            self.index_of_loop = 0
+
+        self.center_freq = self.freqs[self.index_of_loop]
+        self.change_center_freq()
 
     def change_center_freq(self):
         """
@@ -119,9 +160,21 @@ class emitter_finder:
         else:
             return True
 
+    def change_bandwidth(self):
+        """
+        Change the bandwidth of the SDR by sending a request to the Maia SDR.
+        """
+        json = {"bandwidth": self.bandwidth}
+        response = requests.patch(self.http_adress + "/api/ad9361", json=json)
+        if response.status_code != 200:
+            print(response.text)
+            sys.exit(1)
+        else:
+            return True
+
     def UDP_init(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.server_address = ("localhost", 10000)
+        self.server_address = ("localhost", 10010)
         return
 
 
@@ -151,41 +204,16 @@ def setup_maiasdr(args):
         sys.exit(1)
 
 
-async def spectrum_loop(address, line, finder):
+async def spectrum_loop(address, finder):
     async with websockets.connect(address) as ws:
-        i = 0
         while True:
-            
             spec = np.frombuffer(await ws.recv(), "float32")
             power_arry = 10 * np.log10(spec)
-            line.set_ydata(power_arry)
-            
-            ready, _, _ = select.select([sys.stdin], [], [], 0.00001)  # Check every 0.1 seconds            
-            if ready:
-                user_input = sys.stdin.readline().strip()
-                if user_input:
-                    i += 1
-                    if i == len(finder.freqs):
-                        i = 0
-                    finder.center_freq = finder.freqs[i]
-                    finder.change_center_freq()
-                    print("center frequency is changed to = ", finder.center_freq)
-                    continue
+            finder.process_measurement(power_arry)
 
 
-def main_async(ws_address, line, finder):
-    asyncio.run(spectrum_loop(ws_address, line, finder))
-
-def prepare_plot(args):
-    plt.ion()
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    # 4096 points between -bandwidth/2 and +bandwidth/2
-    freqs = np.linspace(-args.bandwidth/2, args.bandwidth/2, 4096)
-    line, = ax.plot(freqs, np.zeros(freqs.size))
-    ax.set_title("gain = "+ str(args.rx_gain))
-    ax.set_ylim((10, 100))
-    return fig, ax, line
+def main_async(ws_address, finder):
+    asyncio.run(spectrum_loop(ws_address, finder))
 
 
 def parse_args():
@@ -209,14 +237,14 @@ def parse_args():
     parser.add_argument(
         "--bandwidth",
         type=int,
-        default=int(54e6),
+        default=int(56e6), # TODO
         help="bandwidth [default=%(default)r]",
         required=False,
     )
     parser.add_argument(
         "--samp_rate",
         type=int,
-        default=int(54e6),
+        default=int(61e6),
         help="Sampling rate [default=%(default)r]",
         required=False,
     )
@@ -251,12 +279,11 @@ def parse_args():
     parser.add_argument(
         "--threshold_gain",
         type=int,
-        default=85,
+        default=80,
         help="Threshold to decide whether the device is found or not",
         required=False,
     )
     return parser.parse_args()
-
 
 
 def main():
@@ -276,15 +303,12 @@ def main():
         args.frequency_range,
         args.threshold_gain,
     )
-    emitter.get_frequencies()
+    # emitter.get_frequencies_around_center()
+    emitter.get_random_frequencies()
     emitter.UDP_init()
-    fig, ax, line = prepare_plot(args)
 
-    loop = threading.Thread(target=main_async, args=(waterfall_address, line, emitter))
+    loop = threading.Thread(target=main_async, args=(waterfall_address, emitter))
     loop.start()
-
-    plt.show(block=True)
-
 
 
 if __name__ == "__main__":
