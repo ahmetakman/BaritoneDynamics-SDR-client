@@ -115,7 +115,7 @@ class emitter_finder:
     def process_measurement(self, measurement):
 
         
-        if self.measurement_counter < 20:
+        if self.measurement_counter < 4:
             self.measurement_counter = self.measurement_counter + 1
             
             self.measured_power_list.append(np.max(measurement))
@@ -134,8 +134,8 @@ class emitter_finder:
 
             if self.found_gain > self.threshold_gain:
                 # publish the found frequency and gain
-                print("Found frequency: ", self.found_frequency)
-                print("Found gain: ", self.found_gain)
+                # print("Found frequency: ", self.found_frequency)
+                # print("Found gain: ", self.found_gain)
 
                 message = str(self.found_frequency) + "," + str(self.found_gain) + "\n"
                 self.sock.sendto(message.encode(), self.server_address)
@@ -233,14 +233,14 @@ def parse_args():
     parser.add_argument(
         "--rx_gain",
         type=int,
-        default=60,
+        default=70,
         help="RX gain [default=%(default)r] dB",
         required=False,
     )
     parser.add_argument(
         "--bandwidth",
         type=int,
-        default=int(18e6), # TODO
+        default=int(54e6), # TODO
         help="bandwidth [default=%(default)r]",
         required=False,
     )
@@ -254,7 +254,7 @@ def parse_args():
     parser.add_argument(
         "--spectrum_rate",
         type=float,
-        default=120,
+        default=507,
         help="Spectrum rate [default=%(default)r] Hz",
         required=False,
     )
@@ -282,7 +282,7 @@ def parse_args():
     parser.add_argument(
         "--threshold_gain",
         type=int,
-        default=80,
+        default=85,
         help="Threshold to decide whether the device is found or not",
         required=False,
     )
@@ -308,9 +308,9 @@ def main():
     )
     # emitter.get_frequencies_around_center()
     # emitter.get_random_frequencies(),
-    emitter.freqs = np.array([3500e6])
+    emitter.freqs = np.array([3300e6])
 
-    emitter.center_freq = 3500e6
+    emitter.center_freq = 3300e6
     emitter.change_center_freq()
 
     emitter.UDP_init()
