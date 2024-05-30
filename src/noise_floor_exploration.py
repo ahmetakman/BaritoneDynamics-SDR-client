@@ -159,7 +159,8 @@ async def spectrum_loop(address, line, finder):
             spec = np.frombuffer(await ws.recv(), "float32")
             power_arry = 10 * np.log10(spec)
             line.set_ydata(power_arry)
-            
+            # print(np.max(power_arry))
+
             ready, _, _ = select.select([sys.stdin], [], [], 0.00001)  # Check every 0.1 seconds            
             if ready:
                 user_input = sys.stdin.readline().strip()

@@ -99,9 +99,9 @@ class emitter_finder:
         bandwith = self.bandwidth
 
         freqs = np.arange(
-            max(center_freq - bandwith * 3.5, self.frequency_range[0]),
-            min(center_freq + bandwith * 4, self.frequency_range[1]),
-            bandwith / 1,
+            max(center_freq - bandwith * 1.5, self.frequency_range[0]),
+            min(center_freq + bandwith * 2, self.frequency_range[1]),
+            bandwith / 3,
         )
         # print(freqs)
         self.freqs = freqs
@@ -115,15 +115,19 @@ class emitter_finder:
     def process_measurement(self, measurement):
 
         
-        if self.measurement_counter < len(self.freqs):
+        if self.measurement_counter < 20:
             self.measurement_counter = self.measurement_counter + 1
             
             self.measured_power_list.append(np.max(measurement))
             self.measured_frequency_list.append(self.freqs[self.index_of_loop])
 
         else:
+            self.measured_power_list.append(np.max(measurement))
+            self.measured_frequency_list.append(self.freqs[self.index_of_loop])
+
             self.found_gain = np.max(self.measured_power_list)
             self.found_frequency = self.measured_frequency_list[0]
+
             self.measured_power_list = []
             self.measured_frequency_list = []
             self.measurement_counter = 0
@@ -145,8 +149,8 @@ class emitter_finder:
         if self.index_of_loop == len(self.freqs):
             self.index_of_loop = 0
 
-        self.center_freq = self.freqs[self.index_of_loop]
-        self.change_center_freq()
+        # self.center_freq = self.freqs[self.index_of_loop]
+        # self.change_center_freq()
 
     def change_center_freq(self):
         """
@@ -211,7 +215,6 @@ async def spectrum_loop(address, finder):
             power_arry = 10 * np.log10(spec)
             finder.process_measurement(power_arry)
 
-
 def main_async(ws_address, finder):
     asyncio.run(spectrum_loop(ws_address, finder))
 
@@ -223,7 +226,7 @@ def parse_args():
     parser.add_argument(
         "--center_freq",
         type=int,
-        default=int(3000e6),
+        default=int(3300e6),
         help="Center frequency [default=%(default)r]",
         required=False,
     )
@@ -237,21 +240,21 @@ def parse_args():
     parser.add_argument(
         "--bandwidth",
         type=int,
-        default=int(56e6), # TODO
+        default=int(18e6), # TODO
         help="bandwidth [default=%(default)r]",
         required=False,
     )
     parser.add_argument(
         "--samp_rate",
         type=int,
-        default=int(61e6),
+        default=int(54e6),
         help="Sampling rate [default=%(default)r]",
         required=False,
     )
     parser.add_argument(
         "--spectrum_rate",
         type=float,
-        default=160,
+        default=120,
         help="Spectrum rate [default=%(default)r] Hz",
         required=False,
     )
@@ -304,7 +307,12 @@ def main():
         args.threshold_gain,
     )
     # emitter.get_frequencies_around_center()
-    emitter.get_random_frequencies()
+    # emitter.get_random_frequencies(),
+    emitter.freqs = np.array([3500e6])
+
+    emitter.center_freq = 3500e6
+    emitter.change_center_freq()
+
     emitter.UDP_init()
 
     loop = threading.Thread(target=main_async, args=(waterfall_address, emitter))

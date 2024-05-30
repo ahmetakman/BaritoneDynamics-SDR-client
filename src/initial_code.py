@@ -326,7 +326,7 @@ def parse_args():
     parser.add_argument(
         "--threshold_gain",
         type=int,
-        default=20,
+        default=90,
         help="Threshold to decide whether the device is found or not",
         required=False,
     )
