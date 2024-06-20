@@ -1,10 +1,14 @@
 # BaritoneDynamics-SDR-client
-This repository will include the codes related to the SDR client.
 
-An excellent SDR software/hardware package written by Daniel Estevez called Miai-SDR for pluto will be used for radio part. 
+This repository includes the codes related to the SDR client.
+** Important Note **
+A propor documentation is not available ,yet the code should be easy to read and follow through.
 
-- The server client software will be here in this repository.
+An excellent SDR software/hardware package written by Daniel Estevez called Miai-SDR for pluto is utilized for radio part. 
+
+- The server client software is developed here in this repository.
+
 - TODO:
-- [ ] Add frequency resolution support.
-- [ ] Add spectogram speed/rate profiling.
-- [ ] Add udp support.
+- [x] Add frequency resolution support.
+- [x] Add spectogram speed/rate profiling.
+- [x] Add udp support.
